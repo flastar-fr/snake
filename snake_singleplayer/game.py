@@ -1,25 +1,25 @@
-import pygame as pg
+import pygame
 from sys import exit
 import time
 
-from .game_functions import (spawn_head_coordinates, spawn_fruit_coordinates, update_map,
-                             generate_game_borders, generate_text)
-from .snake import Snake
-from .timer import Timer
+from game_functions import spawn_head_coordinates, spawn_fruit_coordinates, update_map, generate_game_borders
+from snake import Snake
+from timer import Timer
+from ui_classes import DeathNWinUI, GameStatsUI
 
 
 class Game:
-    def __init__(self, screen: pg.display, tick_rate: int, speed: int | float, x: int, y: int):
-        pg.init()
+    def __init__(self, screen: pygame.display, tick_rate: int, speed: int | float, coords: pygame.Vector2):
+        pygame.init()
         self.screen = screen
         self.tick_rate = tick_rate
         self.speed = speed
-        self.clock = pg.time.Clock()
+        self.clock = pygame.time.Clock()
 
         # game objects
-        self.x_screen_coord = x
-        self.y_screen_coord = y
-        self.game_surface = pg.Surface((400, 400))
+        self.coords_vector = coords
+        self.game_surface = pygame.Surface((400, 400))
+        self.death_n_win_screen = DeathNWinUI(self.game_surface)
         generate_game_borders(self.game_surface)
 
         # game attributs
@@ -33,7 +33,7 @@ class Game:
         self.timer = None
         self.last_direction_change_time = None
 
-        self.screen.blit(self.game_surface, (self.x_screen_coord, self.y_screen_coord))
+        self.screen.blit(self.game_surface, (self.coords_vector.x, self.coords_vector.y))
 
     def launch_game(self):
         """ Method to initialize a game """
@@ -44,26 +44,26 @@ class Game:
         self.lose = False
         self.previous_sec = 0
         self.start_time = time.time()
-        self.last_direction_change_time = pg.time.get_ticks()
+        self.last_direction_change_time = pygame.time.get_ticks()
 
     def handle_events(self):
         """ Method to verify all events """
         # close window
-        for event in pg.event.get():
-            if event.type == pg.QUIT:
-                pg.quit()
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
                 exit()
             # game commands
-            elif event.type == pg.KEYDOWN and not self.lose:
-                current_time = pg.time.get_ticks()
+            elif event.type == pygame.KEYDOWN and not self.lose:
+                current_time = pygame.time.get_ticks()
                 if current_time - self.last_direction_change_time >= 250:
-                    if event.key == pg.K_UP:
+                    if event.key == pygame.K_UP:
                         self.snake.change_facing("N")
-                    elif event.key == pg.K_DOWN:
+                    elif event.key == pygame.K_DOWN:
                         self.snake.change_facing("S")
-                    elif event.key == pg.K_LEFT:
+                    elif event.key == pygame.K_LEFT:
                         self.snake.change_facing("E")
-                    elif event.key == pg.K_RIGHT:
+                    elif event.key == pygame.K_RIGHT:
                         self.snake.change_facing("W")
                     self.last_direction_change_time = current_time
 
@@ -94,16 +94,17 @@ class Game:
                     self.fruit_coordinates = spawn_fruit_coordinates(self.snake.body)
                     self.snake.fruits += 1
 
+                # verify lose and win
+                if self.snake.check_lose_conditions():
+                    self.lose = True
+                    self.timer = Timer(1, 4)
+
+                elif self.snake.check_win_condition():
+                    self.win = True
+                    self.timer = Timer(1, 4)
+
             # screen writing
             update_map(self.game_map_list, self.game_surface)
-
-            # verify lose and win
-            if self.snake.check_lose_conditions():
-                self.lose = True
-                self.timer = Timer(1, 4)
-            elif self.snake.check_win_condition():
-                self.win = True
-                self.timer = Timer(1, 4)
 
         elif self.lose:  # if player lose
             # re initialize to display
@@ -111,7 +112,7 @@ class Game:
             generate_game_borders(self.game_surface)
 
             # lose screen
-            generate_text(self.game_surface, "Game Over", "Calibri", 50, 200, 200)
+            self.death_n_win_screen.show_lose_screen(self.get_score())
 
             # lose timer
             if self.timer.compare_time():
@@ -122,18 +123,15 @@ class Game:
             generate_game_borders(self.game_surface)
 
             # win screen
-            generate_text(self.game_surface, "Win", "Calibri", 50, 200, 200)
-            generate_text(self.game_surface,
-                          f'Game Score {self.get_score()}',
-                          "Calibri", 30, 200, 250)
+            self.death_n_win_screen.show_win_screen(self.get_score())
 
             # win timer
             if self.timer.compare_time():
                 self.launch_game()
 
         # actualize game
-        self.screen.blit(self.game_surface, (self.x_screen_coord, self.y_screen_coord))
-        pg.display.update()
+        self.screen.blit(self.game_surface, (self.coords_vector.x, self.coords_vector.y))
+        pygame.display.update()
         self.clock.tick(self.tick_rate)
 
     # getters
@@ -147,12 +145,9 @@ class Game:
         return self.get_nb_fruits() * 3 - self.get_snake_facing_change() * 0.5
 
 
-def display_score_and_stuffs(game: Game, x: int, y: int):
+def display_score_and_stuffs(game: Game, game_stats_screen: GameStatsUI):
     """ Method to display the score and all informations about """
     game.screen.fill("black")
-    generate_text(game.screen,
-                  f"Score : {game.get_score()}", "Calibri", 40, x, y)
-    generate_text(game.screen,
-                  f"Fruits : {game.get_nb_fruits()}", "Calibri", 35, x, y + 50)
-    generate_text(game.screen,
-                  f"Tourner : {game.get_snake_facing_change()}", "Calibri", 35, x, y + 80)
+    game_stats_screen.show_game_stats(game.get_score(),
+                                      game.get_nb_fruits(),
+                                      game.get_snake_facing_change())
